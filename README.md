@@ -66,7 +66,9 @@ The decision was to document and stay with NLTK rather than switch. Reasons: reb
 
 ### Step 6 — Remove stopwords
 
-Common low-signal words are removed using NLTK's English stopword list after lemmatisation. One explicit modification: negation words (`not`, `no`, `nor`, `never`) are removed from the stopword set before filtering. Negations carry direct emotion signal — "I do not feel happy" is meaningfully different from "I feel happy" — and stripping them would lose information the model needs.
+Common low-signal words are removed using NLTK's English stopword list after lemmatisation. One explicit modification: negation words (`not`, `no`, `nor`, `never`) are removed from the stopword set before filtering.
+
+The reason is concrete, not just theoretical. Row 13 in the dataset reads: *"i do not always find myself feel thankful"* — filtered tokens with negation preserved: `['not', 'always', 'find', 'feel', 'thankful']`. Without `not`, those tokens are `['always', 'find', 'feel', 'thankful']` — nearly identical to a genuinely thankful sentence. Any word-presence or frequency feature built on those tokens would have no signal that this sentence is actually negated. The person is expressing the *absence* of thankfulness, but the model would see evidence of thankfulness. Row 13 is a direct example of the failure mode that motivated keeping negations.
 
 ### Step 7 — Flag empty or near-empty rows
 
