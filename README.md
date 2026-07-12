@@ -70,15 +70,30 @@ Common low-signal words are removed using NLTK's English stopword list after lem
 
 The reason is concrete, not just theoretical. Row 13 in the dataset reads: *"i do not always find myself feel thankful"* — filtered tokens with negation preserved: `['not', 'always', 'find', 'feel', 'thankful']`. Without `not`, those tokens are `['always', 'find', 'feel', 'thankful']` — nearly identical to a genuinely thankful sentence. Any word-presence or frequency feature built on those tokens would have no signal that this sentence is actually negated. The person is expressing the *absence* of thankfulness, but the model would see evidence of thankfulness. Row 13 is a direct example of the failure mode that motivated keeping negations.
 
-### Step 7 — Flag empty or near-empty rows
+### Step 7 — Flag and drop empty or near-empty rows
 
-After the full transformation chain, some comments may end up with zero or one token. Rather than silently dropping these, the pipeline flags them and prints the original comment text. That makes the decision to remove them explicit and documented, rather than a quiet data loss that gets noticed later.
+After all transformations, 6 rows were left with 0 or 1 token. These were flagged first rather than silently dropped — the code prints each flagged row's original comment so the decision to remove it is explicit and on record, not a quiet data loss that surfaces later as a mysterious row-count discrepancy.
+
+Looking at the original comments makes the case for dropping them obvious:
+
+| Row | Original comment | Remaining token |
+|-----|-----------------|-----------------|
+| 309 | "as in sadness a" | `['sadness']` |
+| 896 | "in the army" | `['army']` |
+| 1291 | "before an exam which i" | `['exam']` |
+| 3030 | "in sweden" | `['sweden']` |
+| 4740 | "at school" | `['school']` |
+| 5363 | "during lectures" | `['lecture']` |
+
+These are all sentence fragments — truncated phrases, bare locations, context words with no emotional content. After cleaning, tokenisation, lemmatisation, and stopword removal, nothing meaningful survived. A single token has no relational context: the model can't learn anything from `['army']` that it couldn't learn better from the many complete sentences that use the word *army* in a real emotional context. Keeping these rows adds noise without adding signal — they carry no features that distinguish one emotion from another. Dropping 6 rows from 5,931 has no measurable impact on class balance or training data volume. 5,925 rows remain.
 
 ### Step 8 — Label encoding and splitting
 
 String labels are converted to integers using `sklearn`'s `LabelEncoder`. The encoder is saved so predictions can be decoded back to class names at inference time without re-fitting.
 
-The train/validation/test split is 70/15/15 with stratification, which preserves class proportions in all three sets. After splitting, the class ratios are verified explicitly — a failed stratification can silently skew everything downstream and only show up as a confusing result at evaluation time.
+The train/validation/test split is 70/15/15 with stratification, which preserves class proportions in all three sets: 4,147/889/889 rows, each holding to roughly the same anger/fear/joy ratio. After splitting, the class ratios are verified explicitly — a failed stratification can silently skew everything downstream and only show up as a confusing result at evaluation time. (Validation and test proportions match to several decimal places; that's expected, not a bug — both come from an even 50/50 split of the same 889-row temp set.)
+
+The processed data is saved as four separate pickles — `train.pkl`, `valid.pkl`, `test.pkl`, `label_encoder.pkl` — rather than one combined file. Downstream steps rarely need every split at once: feature engineering and tuning loop over train/val repeatedly while test stays untouched until final evaluation. Separate files let each stage load only what it needs and make it obvious which artifact changed if preprocessing is rerun. Each split table is recombined via `assign()` at the save boundary — `X_train`/`y_train` are kept apart through the split itself to match `train_test_split`'s expected shape, then joined back into one `Comment` + `filtered_tokens` + `Label` table because that's the shape Notebook 03 actually needs to browse rows and build features from.
 
 ---
 
