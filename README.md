@@ -52,7 +52,7 @@ Full step-by-step reasoning, testing, and decision rationale live in [`notebooks
 - **Step 8** — Encode string labels to integers with `LabelEncoder`, saving the encoder for later decoding.
 - **Step 9** — Split 70/15/15 into train/validation/test, stratified on label.
 - **Step 10** — Verify class proportions held across all three splits.
-- **Step 11** — Save `train.pkl`, `valid.pkl`, `test.pkl`, and `label_encoder.pkl` to `data/processed/`.
+- **Step 11** — Save `train.pkl`, `valid.pkl`, `test.pkl`, and `label_encoder.pkl` to `data/processed/`. Final count: 5,925 rows (5,937 raw − 6 contradictory duplicates − 6 empty/near-empty fragments), split 4,147 / 889 / 889.
 
 Two findings from this pipeline are worth calling out up front: the EDA duplicate-label check found that every contradictory-label pair (Step 0) is anger vs. fear — never any other class pair — suggesting these two emotions are the hardest for annotators to tell apart. And `WordNetLemmatizer` (Step 5) has no dictionary entries for irregular verb forms, so `"felt"`, `"went"`, `"had"`, and `"was"` survive lemmatisation unchanged even though spaCy handles them correctly — a documented, accepted gap rather than a bug.
 
