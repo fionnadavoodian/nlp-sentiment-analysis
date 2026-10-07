@@ -1,79 +1,452 @@
-# Emotion Classification from Text
+# Three-Class Emotion Classification from Text
 
-Three-class sentiment classifier (anger / joy / fear) built from scratch on a scraped social-media comment dataset. Every preprocessing decision is documented with a reason — this README explains the thinking behind each step, what was tested along the way, and where the pipeline has known gaps.
+A from-scratch NLP project for classifying short social-media comments into three emotions:
+
+- **Anger**
+- **Fear**
+- **Joy**
+
+The project is built around a simple question:
+
+> **How much do different text representations, preprocessing strategies, classical machine-learning models, and transformer-based models affect emotion classification performance?**
+
+Rather than applying a preprocessing pipeline blindly, the project documents the reasoning behind each NLP decision, tests alternative approaches, and evaluates whether each additional step actually improves the model.
 
 ---
 
-## How to run
+## Project Status
 
-```bash
-pip install -r requirements.txt
-python -m nltk.downloader stopwords wordnet averaged_perceptron_tagger punkt
-python -m spacy download en_core_web_sm
+🚧 **In progress**
+
+The project currently contains the dataset investigation, exploratory data analysis, preprocessing experiments, and dataset preparation.
+
+The next stages are classical NLP baselines, feature engineering, systematic evaluation, error analysis, and eventually a Hugging Face transformer model.
+
+The pipeline is intentionally being developed incrementally so that each modeling decision can be evaluated rather than assumed to be beneficial.
+
+---
+
+## Dataset
+
+The dataset contains **5,937 short social-media comments** labeled with one of three emotions:
+
+| Emotion | Approx. Count |
+| ------- | ------------: |
+| Anger   |         2,000 |
+| Joy     |         2,000 |
+| Fear    |         1,937 |
+
+The classes are therefore relatively well balanced.
+
+The comments are short, with most containing only a small number of words, making this a suitable problem for comparing both traditional NLP methods and modern transformer-based approaches.
+
+---
+
+## Project Goals
+
+The project has several goals:
+
+1. Understand and investigate the quality of the dataset.
+2. Develop a reproducible NLP preprocessing pipeline.
+3. Establish simple and strong classical NLP baselines.
+4. Compare different text representations and feature-engineering strategies.
+5. Measure the actual effect of preprocessing decisions through ablation experiments.
+6. Investigate model errors rather than relying only on aggregate accuracy.
+7. Examine the ambiguity between **anger** and **fear**.
+8. Compare a strong classical NLP model with a Hugging Face transformer.
+9. Build a reusable inference pipeline for the final model.
+10. Document the complete experimental process.
+
+---
+
+# 1. Exploratory Data Analysis
+
+The first stage investigates the dataset before any modeling is performed.
+
+The EDA covers:
+
+- class distribution
+- missing values
+- duplicate comments
+- contradictory duplicate labels
+- text length
+- token counts
+- unusually short comments
+- potentially problematic examples
+- label quality
+
+One particularly important finding was that the contradictory duplicate labels were exclusively between **anger and fear**.
+
+This suggests a potential ambiguity between these two classes in the dataset. This is currently treated as a hypothesis rather than a conclusion and will be evaluated later using model confusion matrices and targeted error analysis.
+
+---
+
+# 2. Data Quality
+
+Before modeling, the project investigates whether the dataset contains problematic examples.
+
+This includes:
+
+### Exact duplicates
+
+Identical comments appearing multiple times are investigated to determine whether they contain consistent labels.
+
+### Conflicting duplicates
+
+When the same comment appears with different labels, the conflict is investigated rather than silently allowing the contradictory examples into the training data.
+
+### Potentially problematic examples
+
+Very short, incomplete, or otherwise suspicious comments are reviewed individually.
+
+### Near duplicates
+
+The final pipeline will also investigate highly similar comments to determine whether similar examples appear across train, validation, and test sets.
+
+This is important because random splitting can produce overly optimistic results when nearly identical examples occur in different splits.
+
+---
+
+# 3. Preprocessing
+
+The preprocessing pipeline is designed to preserve useful linguistic information while removing unnecessary noise.
+
+The project investigates:
+
+- lowercasing
+- tokenization
+- punctuation handling
+- contraction handling
+- negation
+- stopword removal
+- lemmatization
+- short-document filtering
+
+Importantly, preprocessing choices are treated as **experimental variables** rather than assumptions.
+
+For example, stopword removal and lemmatization may sound beneficial, but they can also remove information useful for emotion classification.
+
+Therefore, their usefulness will ultimately be determined through validation experiments.
+
+---
+
+# 4. Data Splitting
+
+The cleaned dataset is divided into:
+
+- **70% training**
+- **15% validation**
+- **15% test**
+
+The splits are stratified to preserve the class distribution.
+
+A fixed random seed is used to make the experiments reproducible.
+
+Duplicate and data-quality checks are performed before splitting so that problematic duplicates are not accidentally distributed across different datasets.
+
+The test set is reserved for final evaluation and is not used for model selection.
+
+---
+
+# 5. Classical NLP Baselines
+
+The first modeling stage focuses on traditional NLP methods.
+
+The baseline progression will include:
+
+### Majority-class baseline
+
+Establishes the minimum performance that a useful classifier should exceed.
+
+### Bag-of-Words
+
+Tests raw word-frequency representations.
+
+### TF-IDF
+
+Tests weighted lexical representations.
+
+### Classical classifiers
+
+The project will compare models such as:
+
+- Multinomial Naive Bayes
+- Logistic Regression
+- Linear Support Vector Machine
+
+The purpose is not simply to find the highest score, but to understand how different representations and classifiers behave on the dataset.
+
+---
+
+# 6. Feature Engineering
+
+The project investigates several representations:
+
+- binary word presence
+- word frequency
+- TF
+- TF-IDF
+- unigrams
+- bigrams
+- potentially trigrams
+
+The effect of n-grams is particularly relevant because emotion can depend on combinations of words.
+
+For example:
+
+```text
+very happy
+really afraid
+so angry
 ```
 
-Then run the notebooks in order: `01_eda.ipynb` → `02_preprocessing.ipynb`. The processed splits land in `data/processed/` (gitignored — regenerated by running `02_preprocessing.ipynb`, deterministic via `random_state=42`).
+may contain information that individual words alone do not capture.
+
+Feature engineering will therefore be evaluated experimentally rather than assumed to improve performance.
 
 ---
 
-## The dataset
+# 7. Preprocessing Ablation
 
-5,937 short comments labeled with one of three emotions (`Comment` + `Emotion`, no nulls). Class split is near-balanced (anger 2,000 · joy 2,000 · fear 1,937). Text is short — mean 19 words, max 64 — so truncation at 64 tokens is safe for any sequence model.
+One of the main experiments is an ablation study.
 
----
+Different preprocessing configurations will be compared while keeping the model and evaluation procedure controlled.
 
-## Exploratory data analysis
+For example:
 
-Full checks, sample inspection, and reasoning live in [`notebooks/01_eda.ipynb`](notebooks/01_eda.ipynb). Quick map of what was checked:
+| Pipeline                    | Model               | Macro-F1 |
+| --------------------------- | ------------------- | -------: |
+| Minimal normalization       | TF-IDF + Linear SVM |        — |
+| + punctuation normalization | TF-IDF + Linear SVM |        — |
+| + stopword removal          | TF-IDF + Linear SVM |        — |
+| + lemmatization             | TF-IDF + Linear SVM |        — |
+| + negation handling         | TF-IDF + Linear SVM |        — |
+| + bigrams                   | TF-IDF + Linear SVM |        — |
 
-- **1.1** — Shape, dtypes, null counts: 5,937 rows × 2 columns, no nulls.
-- **1.2** — Class balance: anger 2,000 · joy 2,000 · fear 1,937 — near-balanced.
-- **1.3** — Text length distribution: mean 19 words, median 17, max 64, right-skewed.
-- **1.4** — Manual sample of 5 comments per class: labels mostly sensible, some noise (a typo, a couple of likely mislabels, a few ambiguous cases) accepted as-is.
-- **1.5** — Missing values and duplicates: 0 nulls, 3 duplicate pairs (6 rows) with conflicting labels.
-- **1.6** — Summary and decision: drop the 6 conflicting-label rows, accept remaining label noise, proceed to preprocessing.
+This allows the project to answer:
 
-The one finding worth calling out up front: all 3 duplicate-label pairs conflict specifically `anger` vs. `fear` — never any other class pair. That's not random labeling noise; it suggests these two emotions are the hardest to tell apart from text alone, and is worth watching for in the model's confusion matrix at evaluation.
+> **Which preprocessing decisions actually improve emotion classification?**
 
----
-
-## Preprocessing pipeline
-
-Full step-by-step reasoning, testing, and decision rationale live in [`notebooks/02_preprocessing.ipynb`](notebooks/02_preprocessing.ipynb). This section is just a skimmable map of what each step does.
-
-- **Step 0** — Drop the 6 contradictory-duplicate rows before any transformation runs, to prevent label leakage across splits.
-- **Step 1** — Lowercase, then strip to `[a-zA-Z\s]` only, storing the result in `Cleaned_Comment` (raw `Comment` kept untouched).
-- **Step 2** — Tokenise with `nltk.word_tokenize()` (handles contractions correctly, unlike `.split()`).
-- **Step 3** — Remove known html-junk tokens (`www`, `href`, `src`, `class`, etc.) that survive the Step 1 regex.
-- **Step 4** — POS-tag tokens with `nltk.pos_tag()`, before stopword removal so tagging context isn't lost.
-- **Step 5** — Lemmatise with `WordNetLemmatizer`, using a POS-aware helper (`get_wordnet_pos()`) to pick the right tag.
-- **Step 6** — Remove stopwords via NLTK's English list, with negation words (`not`, `no`, `nor`, `never`) explicitly preserved.
-- **Step 7** — Flag and drop the 6 rows left with 0-1 tokens after the pipeline (sentence fragments with no emotional content).
-- **Step 8** — Encode string labels to integers with `LabelEncoder`, saving the encoder for later decoding.
-- **Step 9** — Split 70/15/15 into train/validation/test, stratified on label.
-- **Step 10** — Verify class proportions held across all three splits.
-- **Step 11** — Save `train.pkl`, `valid.pkl`, `test.pkl`, and `label_encoder.pkl` to `data/processed/`. Final count: 5,925 rows (5,937 raw − 6 contradictory duplicates − 6 empty/near-empty fragments), split 4,147 / 889 / 889.
-
-Two findings from this pipeline are worth calling out up front: the EDA duplicate-label check found that every contradictory-label pair (Step 0) is anger vs. fear — never any other class pair — suggesting these two emotions are the hardest for annotators to tell apart. And `WordNetLemmatizer` (Step 5) has no dictionary entries for irregular verb forms, so `"felt"`, `"went"`, `"had"`, and `"was"` survive lemmatisation unchanged even though spaCy handles them correctly — a documented, accepted gap rather than a bug.
+A preprocessing technique will not be considered beneficial simply because it is commonly used.
 
 ---
 
-## Tool choices
+# 8. Model Evaluation
 
-**Why NLTK over spaCy for the main pipeline?**
+Models will be evaluated using more than accuracy.
 
-Both are reasonable choices. NLTK was selected because it keeps tokenisation, POS tagging, and lemmatisation tightly coupled — they all share the same tokenisation assumptions, which avoids subtle boundary mismatches.
+Primary metrics include:
 
-spaCy's lemmatiser was tested directly and handles irregular verbs that WordNet's dictionary misses. Tested across multiple examples: `"felt"` → `"feel"`, `"went"` → `"go"`, `"had"` → `"have"`, `"was"` → `"be"` — all correctly reduced to their base forms, where NLTK leaves each one unchanged. Despite that advantage, switching just the lemmatiser while keeping NLTK's tagger would introduce a toolchain mismatch: the two tools make different tokenisation assumptions, and mixing them mid-pipeline is the kind of inconsistency that produces subtle errors that are hard to diagnose later.
+- Accuracy
+- Precision
+- Recall
+- F1-score
+- **Macro-F1**
+- per-class F1
 
-**Why manual token filtering over vectoriser-level preprocessing?**
+Macro-F1 is particularly important because it evaluates all three emotion classes independently rather than allowing overall accuracy to hide weaknesses in an individual class.
 
-The html-junk filter is built as an explicit token-level set rather than relying on a vectoriser's `min_df` threshold or analyzer to quietly discard rare tokens. The reason is visibility: an explicit list documents exactly what's being removed and why, whereas a threshold-based approach silently drops tokens without a record of what was lost.
+The final test set will only be used after model selection is complete.
 
 ---
 
-## Known gaps
+# 9. Error Analysis
 
-Two structural gaps (irregular-verb lemmatisation, the anger/fear boundary) are called out where they're found, above. The remaining open item:
+Aggregate metrics are not sufficient to understand the problem.
 
-- **Label noise** — a small number of comments appear to carry incorrect labels (e.g. a comment about physical cold labeled `anger`, an apprehensive comment labeled `anger`). Accepted as-is for now — the dataset is large enough to learn through it. If the confusion matrix at evaluation shows systematic mislabeling patterns, a targeted cleaning pass would be the next step.
+The project will investigate:
+
+- false positives
+- false negatives
+- confusion between anger and fear
+- difficult joy examples
+- ambiguous language
+- mislabeled examples
+- very short comments
+- negation-related errors
+- lexical ambiguity
+
+The goal is to understand **why** the model fails.
+
+This is particularly important because the initial EDA identified contradictory labels exclusively between anger and fear.
+
+The analysis will therefore test whether the model independently exhibits the same ambiguity.
+
+---
+
+# 10. Classical NLP vs Transformer
+
+After establishing a strong classical baseline, the project will introduce a transformer-based classifier using the **Hugging Face ecosystem**.
+
+The transformer pipeline will operate on the original text rather than aggressively preprocessed tokens.
+
+The progression will be:
+
+```text
+Original text
+      ↓
+Hugging Face tokenizer
+      ↓
+Pretrained transformer
+      ↓
+Fine-tuning
+      ↓
+Emotion classification
+```
+
+A lightweight pretrained model such as DistilBERT may be used initially, with a stronger model considered if justified by the results and available resources.
+
+The purpose is to determine whether a transformer provides a meaningful improvement over the best classical NLP approach on this relatively small, short-text dataset.
+
+---
+
+# 11. Model Comparison
+
+The final comparison will consider both performance and practical complexity.
+
+| Model               | Representation   | Accuracy | Macro-F1 | Training Time | Inference |
+| ------------------- | ---------------- | -------: | -------: | ------------: | --------: |
+| Majority            | —                |        — |        — |             — |         — |
+| Naive Bayes         | TF-IDF           |        — |        — |             — |         — |
+| Logistic Regression | TF-IDF           |        — |        — |             — |         — |
+| Linear SVM          | TF-IDF + n-grams |        — |        — |             — |         — |
+| Transformer         | Raw text         |        — |        — |             — |         — |
+
+The objective is not automatically to declare the transformer the winner.
+
+If a classical model achieves similar performance at a fraction of the computational cost, that is itself an important result.
+
+---
+
+# 12. Explainability
+
+Interpretability will be approached differently depending on the model.
+
+For linear classical models, important features can be investigated through model coefficients to identify words and n-grams associated with each emotion.
+
+For the transformer, the focus will initially be on qualitative error analysis and model predictions rather than building a large explainability framework.
+
+The goal is to understand model behavior without adding unnecessary complexity.
+
+---
+
+# 13. Inference Pipeline
+
+After selecting the final model, the project will provide a reusable prediction interface.
+
+Conceptually:
+
+```python
+predict_emotion(
+    "I am really nervous about tomorrow."
+)
+```
+
+will return something similar to:
+
+```text
+Prediction: fear
+
+Confidence:
+fear     0.92
+anger    0.05
+joy      0.03
+```
+
+The exact implementation will depend on the final selected model.
+
+---
+
+# 14. Interactive Demo
+
+As a final portfolio component, the project may include a lightweight interactive application allowing users to enter text and receive:
+
+- predicted emotion
+- class probabilities/confidence
+- model used
+
+The application will be implemented only after the underlying NLP pipeline and evaluation are stable.
+
+---
+
+# Repository Structure
+
+The final project is intended to evolve toward:
+
+```text
+nlp-sentiment-analysis/
+│
+├── data/
+│   ├── raw/
+│   └── processed/
+│
+├── notebooks/
+│   ├── 01_eda.ipynb
+│   ├── 02_preprocessing.ipynb
+│   ├── 03_baseline_models.ipynb
+│   ├── 04_feature_engineering.ipynb
+│   ├── 05_model_comparison.ipynb
+│   ├── 06_error_analysis.ipynb
+│   └── 07_transformer.ipynb
+│
+├── src/
+│   ├── preprocessing.py
+│   ├── features.py
+│   ├── models.py
+│   ├── evaluation.py
+│   └── inference.py
+│
+├── models/
+│
+├── reports/
+│   ├── figures/
+│   └── results/
+│
+├── app/
+│
+├── requirements.txt
+├── README.md
+└── LICENSE
+```
+
+The structure may evolve as the project develops.
+
+---
+
+# Current Known Gaps
+
+The current repository is **not yet a finished end-to-end NLP system**.
+
+The remaining work includes:
+
+- correcting and validating preprocessing decisions
+- establishing classical baselines
+- feature-engineering experiments
+- preprocessing ablation
+- hyperparameter tuning
+- cross-validation
+- final model selection
+- near-duplicate analysis
+- confusion-matrix analysis
+- targeted error analysis
+- transformer fine-tuning
+- classical-vs-transformer comparison
+- inference pipeline
+- final documentation
+- optional interactive demo
+
+These gaps are intentional and represent the remaining stages of the project.
+
+---
+
+# Final Objective
+
+The finished project should answer a broader question than simply:
+
+> "Can a model classify these comments?"
+
+Instead, it should answer:
+
+> **How do preprocessing, feature representation, classical machine-learning algorithms, and transformer-based representations affect three-class emotion classification, and what kinds of linguistic ambiguity cause the models to fail?**
+
+That comparison is the central theme of the project.
