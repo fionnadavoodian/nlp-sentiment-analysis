@@ -1,14 +1,4 @@
-"""Deterministic text preprocessing shared across notebooks.
-
-No function here depends on the corpus or the split - same behavior on
-train/val/test/inference text. Corpus-dependent steps (vocabulary, TF-IDF
-fitting) and dataset-specific row cleanup (duplicate/fragment removal)
-stay out of this file; see 02_preprocessing.ipynb for the reasoning behind
-each step below.
-"""
-
 import re
-
 import nltk
 from nltk.corpus import stopwords, wordnet
 from nltk.stem import WordNetLemmatizer
@@ -49,7 +39,7 @@ CONTRACTIONS = {
     "theres": "there is", "there's": "there is",
 }
 
-_CONTRACTIONS_PATTERN = re.compile(
+CONTRACTIONS_PATTERN = re.compile(
     r"\b(" + "|".join(re.escape(k) for k in sorted(CONTRACTIONS, key=len, reverse=True)) + r")\b"
 )
 
@@ -64,31 +54,31 @@ NEGATION_WORDS = {
     "neither", "nowhere", "hardly", "scarcely", "barely",
 }
 
-_lemmatizer = WordNetLemmatizer()
-_all_stop_words = set(stopwords.words("english"))
+lemmatizer = WordNetLemmatizer()
+all_stop_words = set(stopwords.words("english"))
 
 
-def expand_contractions(text: str) -> str:
-    return _CONTRACTIONS_PATTERN.sub(lambda m: CONTRACTIONS[m.group(0)], text)
+def expand_contractions(text):
+    return CONTRACTIONS_PATTERN.sub(lambda m: CONTRACTIONS[m.group(0)], text)
 
 
-def normalize(text: str) -> str:
+def normalize(text):
     return expand_contractions(text.lower())
 
 
-def clean(text: str) -> str:
+def clean(text):
     return re.sub(r"[^a-zA-Z\s]", "", text)
 
 
-def tokenize_raw(text: str) -> list[str]:
+def tokenize_raw(text):
     return nltk.word_tokenize(text)
 
 
-def remove_html_junk(tokens: list[str]) -> list[str]:
+def remove_html_junk(tokens):
     return [t for t in tokens if t not in HTML_JUNK]
 
 
-def get_wordnet_pos(pos_tag: str) -> str:
+def get_wordnet_pos(pos_tag):
     if pos_tag.startswith("J"):
         return wordnet.ADJ
     elif pos_tag.startswith("V"):
@@ -101,26 +91,22 @@ def get_wordnet_pos(pos_tag: str) -> str:
         return wordnet.NOUN
 
 
-def lemmatize(tokens: list[str]) -> list[str]:
+def lemmatize(tokens):
     tagged = nltk.pos_tag(tokens)
-    return [_lemmatizer.lemmatize(tok, get_wordnet_pos(tag)) for tok, tag in tagged]
+    return [lemmatizer.lemmatize(tok, get_wordnet_pos(tag)) for tok, tag in tagged]
 
 
-def get_stop_words(protect_negation: bool = True) -> set[str]:
-    return _all_stop_words - NEGATION_WORDS if protect_negation else _all_stop_words
+def get_stop_words(protect_negation=True):
+    return all_stop_words - NEGATION_WORDS if protect_negation else all_stop_words
 
 
-def remove_stopwords(tokens: list[str], protect_negation: bool = True) -> list[str]:
+def remove_stopwords(tokens, protect_negation=True):
     stop_words = get_stop_words(protect_negation)
     return [t for t in tokens if t not in stop_words]
 
 
-def preprocess(
-    text: str,
-    apply_lemmatization: bool = True,
-    apply_stopwords: bool = True,
-    protect_negation: bool = True,
-) -> list[str]:
+# same steps as 02_preprocessing.ipynb, for notebooks that just need final tokens
+def preprocess(text, apply_lemmatization=True, apply_stopwords=True, protect_negation=True):
     tokens = remove_html_junk(tokenize_raw(clean(normalize(text))))
     if apply_lemmatization:
         tokens = lemmatize(tokens)
