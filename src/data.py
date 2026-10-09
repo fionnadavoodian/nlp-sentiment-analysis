@@ -13,8 +13,8 @@ EKMAN_MAPPING = {
     "neutral": ["neutral"],
 }
 
-label_names_path = Path(__file__).parent / "../data/raw/go_emotions_label_names.txt"
-FINE_NAMES = open(label_names_path).read().splitlines()
+DATA_DIR = Path(__file__).parent / "../data/raw"
+FINE_NAMES = open(DATA_DIR / "go_emotions_label_names.txt").read().splitlines()
 
 FINE_TO_EKMAN = {}
 for ekman_idx, ekman_class in enumerate(EKMAN_CLASSES):
