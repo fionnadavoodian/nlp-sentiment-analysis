@@ -13,7 +13,7 @@ EKMAN_MAPPING = {
     "neutral": ["neutral"],
 }
 
-DATA_DIR = Path(__file__).parent / "../data/raw"
+DATA_DIR = Path(__file__).parent.parent / "data/raw"
 
 _fine_to_ekman = None
 
