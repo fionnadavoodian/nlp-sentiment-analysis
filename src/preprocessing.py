@@ -1,31 +1,10 @@
-"""Deterministic, corpus-independent text preprocessing.
+"""Deterministic text preprocessing shared across notebooks.
 
-Every function here depends only on its own input text (plus fixed lookup
-tables defined in this module) — never on the rest of the corpus, never on
-which split (train/val/test) the text came from. That means the exact same
-function call is safe to apply identically to training data, validation
-data, test data, or a brand-new string at inference time, with no risk of
-leaking information across the train/val/test boundary.
-
-What does NOT belong in this module, and why:
-  - Building a vocabulary, fitting a TfidfVectorizer/CountVectorizer, or any
-    other step whose output depends on the whole training set. Those are
-    corpus-dependent: they must be fit on the training split only, then
-    applied (not re-fit) to validation/test. That logic lives with whatever
-    owns the split (currently 03_feature_engineering.ipynb).
-  - Dropping the 3 contradictory-duplicate pairs or the 6 truncated-fragment
-    rows from 02_preprocessing.ipynb. Those are one-time cleaning decisions
-    tied to specific rows in this specific raw CSV, not a general text
-    transformation that would make sense to apply to a new unseen string.
-
-Configurability: `preprocess()` takes three independent flags so each one's
-effect can be measured rather than assumed (Phase 3/4/7 of the project plan):
-  - apply_lemmatization: run WordNet lemmatisation or skip it.
-  - apply_stopwords: remove stopwords or skip it.
-  - protect_negation: when stopwords ARE removed, whether negation words
-    (not/no/never/...) are excluded from the stopword set. Irrelevant when
-    apply_stopwords is False (nothing is being removed either way).
-All three default to True, reproducing the pipeline's original behavior.
+No function here depends on the corpus or the split - same behavior on
+train/val/test/inference text. Corpus-dependent steps (vocabulary, TF-IDF
+fitting) and dataset-specific row cleanup (duplicate/fragment removal)
+stay out of this file; see 02_preprocessing.ipynb for the reasoning behind
+each step below.
 """
 
 import re
@@ -33,8 +12,6 @@ import re
 import nltk
 from nltk.corpus import stopwords, wordnet
 from nltk.stem import WordNetLemmatizer
-
-# --- Fixed lookup tables (not fit on any corpus) ---
 
 CONTRACTIONS = {
     "dont": "do not", "don't": "do not",
@@ -92,47 +69,26 @@ _all_stop_words = set(stopwords.words("english"))
 
 
 def expand_contractions(text: str) -> str:
-    """Expand both apostrophe'd (don't) and already-merged (dont) contraction
-    forms to their full words. See notebooks/02_preprocessing.ipynb 2.1 for
-    the reasoning and the deliberately-excluded ambiguous forms (ill, hell,
-    well, its, were, id)."""
     return _CONTRACTIONS_PATTERN.sub(lambda m: CONTRACTIONS[m.group(0)], text)
 
 
 def normalize(text: str) -> str:
-    """Lowercase + contraction expansion. No corpus dependency."""
     return expand_contractions(text.lower())
 
 
 def clean(text: str) -> str:
-    """Strip to [a-zA-Z\\s] only. Expects already-normalized text (run
-    normalize() first, or contractions will be mangled before they can be
-    expanded)."""
     return re.sub(r"[^a-zA-Z\s]", "", text)
 
 
 def tokenize_raw(text: str) -> list[str]:
-    """Word-tokenize only. HTML-junk tokens are removed separately by
-    remove_html_junk() — kept apart because 02_preprocessing.ipynb teaches
-    them as two distinct steps (2.2 then 2.3)."""
     return nltk.word_tokenize(text)
 
 
 def remove_html_junk(tokens: list[str]) -> list[str]:
-    """Drop known HTML-artifact tokens that survive the alpha-only strip
-    (www, href, src, ...) because they're purely alphabetic."""
     return [t for t in tokens if t not in HTML_JUNK]
 
 
-def tokenize(text: str) -> list[str]:
-    """Word-tokenize and drop known HTML-junk tokens in one call, for
-    callers that don't need the two steps separated (e.g. preprocess())."""
-    return remove_html_junk(tokenize_raw(text))
-
-
 def get_wordnet_pos(pos_tag: str) -> str:
-    """Map a Penn Treebank POS tag to WordNet's simpler tag set, defaulting
-    to noun for anything that doesn't match."""
     if pos_tag.startswith("J"):
         return wordnet.ADJ
     elif pos_tag.startswith("V"):
@@ -146,19 +102,12 @@ def get_wordnet_pos(pos_tag: str) -> str:
 
 
 def lemmatize(tokens: list[str]) -> list[str]:
-    """POS-tag then tag-aware lemmatize. Known gap: WordNet's dictionary
-    doesn't cover irregular verb forms (felt, went, was survive unchanged)
-    — see 02_preprocessing.ipynb 2.5 for the spaCy-verified comparison."""
     tagged = nltk.pos_tag(tokens)
     return [_lemmatizer.lemmatize(tok, get_wordnet_pos(tag)) for tok, tag in tagged]
 
 
 def get_stop_words(protect_negation: bool = True) -> set[str]:
-    """The stopword set actually used for filtering. protect_negation=True
-    excludes NEGATION_WORDS so negation survives stopword removal."""
-    if protect_negation:
-        return _all_stop_words - NEGATION_WORDS
-    return _all_stop_words
+    return _all_stop_words - NEGATION_WORDS if protect_negation else _all_stop_words
 
 
 def remove_stopwords(tokens: list[str], protect_negation: bool = True) -> list[str]:
@@ -172,11 +121,7 @@ def preprocess(
     apply_stopwords: bool = True,
     protect_negation: bool = True,
 ) -> list[str]:
-    """Full deterministic pipeline: normalize -> clean -> tokenize ->
-    [lemmatize] -> [stopword removal]. Safe to apply identically to
-    train/val/test/inference text — no fitting, no corpus dependency.
-    """
-    tokens = tokenize(clean(normalize(text)))
+    tokens = remove_html_junk(tokenize_raw(clean(normalize(text))))
     if apply_lemmatization:
         tokens = lemmatize(tokens)
     if apply_stopwords:
