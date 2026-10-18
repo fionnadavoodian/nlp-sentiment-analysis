@@ -4,49 +4,54 @@ from nltk.corpus import stopwords, wordnet
 from nltk.stem import WordNetLemmatizer
 
 CONTRACTIONS = {
-    "dont": "do not", "don't": "do not",
-    "didnt": "did not", "didn't": "did not",
-    "doesnt": "does not", "doesn't": "does not",
-    "isnt": "is not", "isn't": "is not",
-    "wasnt": "was not", "wasn't": "was not",
-    "werent": "were not", "weren't": "were not",
-    "arent": "are not", "aren't": "are not",
-    "cant": "can not", "can't": "can not",
-    "couldnt": "could not", "couldn't": "could not",
-    "wouldnt": "would not", "wouldn't": "would not",
-    "shouldnt": "should not", "shouldn't": "should not",
-    "wont": "will not", "won't": "will not",
-    "hadnt": "had not", "hadn't": "had not",
-    "hasnt": "has not", "hasn't": "has not",
-    "havent": "have not", "haven't": "have not",
-    "mustnt": "must not", "mustn't": "must not",
-    "neednt": "need not", "needn't": "need not",
-    "shant": "shall not", "shan't": "shall not",
-    "mightnt": "might not", "mightn't": "might not",
-    "aint": "is not", "ain't": "is not",
-    "im": "i am", "i'm": "i am",
-    "ive": "i have", "i've": "i have",
-    "youre": "you are", "you're": "you are",
-    "youve": "you have", "you've": "you have",
-    "theyre": "they are", "they're": "they are",
-    "theyve": "they have", "they've": "they have",
-    "hes": "he is", "he's": "he is",
-    "shes": "she is", "she's": "she is",
-    "lets": "let us", "let's": "let us",
-    "whats": "what is", "what's": "what is",
-    "whos": "who is", "who's": "who is",
-    "thats": "that is", "that's": "that is",
-    "theres": "there is", "there's": "there is",
+    "don't": 'do not',
+    "didn't": 'did not',
+    "doesn't": 'does not',
+    "isn't": 'is not',
+    "wasn't": 'was not',
+    "weren't": 'were not',
+    "aren't": 'are not',
+    "can't": 'can not',
+    "couldn't": 'could not',
+    "wouldn't": 'would not',
+    "shouldn't": 'should not',
+    "won't": 'will not',
+    "hadn't": 'had not',
+    "hasn't": 'has not',
+    "haven't": 'have not',
+    "mustn't": 'must not',
+    "needn't": 'need not',
+    "shan't": 'shall not',
+    "mightn't": 'might not',
+    "ain't": 'is not',
+    "i'm": 'i am',
+    "i've": 'i have',
+    "you're": 'you are',
+    "you've": 'you have',
+    "they're": 'they are',
+    "they've": 'they have',
+    "he's": 'he is',
+    "she's": 'she is',
+    "let's": 'let us',
+    "what's": 'what is',
+    "who's": 'who is',
+    "that's": 'that is',
+    "there's": 'there is',
 }
 
+# One maintained mapping; derive matching variants and the compact lookup from it.
+# Do not expand bare "lets": it can be an ordinary verb rather than "let us".
+_CONTRACTION_LOOKUP = {form.replace("'", ""): expansion for form, expansion in CONTRACTIONS.items()}
 CONTRACTIONS_PATTERN = re.compile(
-    r"\b(" + "|".join(re.escape(k) for k in sorted(CONTRACTIONS, key=len, reverse=True)) + r")\b"
+    r"\b(?:" + "|".join(
+        re.escape(form).replace("'", r"(?:'|\s+)" if form == "let's" else r"(?:'|\s+)?")
+        for form in sorted(CONTRACTIONS, key=len, reverse=True)
+    ) + r")\b"
 )
 
 HTML_JUNK = {
     "www", "http", "https", "href", "src", "img",
-    "rel", "bookmark", "class", "aligncenter",
-    "clairee", "bondmusings",
+    "aligncenter",
 }
 
 NEGATION_WORDS = {
@@ -59,15 +64,19 @@ all_stop_words = set(stopwords.words("english"))
 
 
 def expand_contractions(text):
-    return CONTRACTIONS_PATTERN.sub(lambda m: CONTRACTIONS[m.group(0)], text)
+    def expand_match(match):
+        compact = re.sub(r"['\s]", "", match.group(0))
+        return _CONTRACTION_LOOKUP[compact]
+
+    return CONTRACTIONS_PATTERN.sub(expand_match, text)
 
 
 def normalize(text):
-    return expand_contractions(text.lower())
+    return expand_contractions(text.lower().replace("’", "'"))
 
 
 def clean(text):
-    return re.sub(r"[^a-zA-Z\s]", "", text)
+    return re.sub(r"[^a-zA-Z\s]", " ", text)
 
 
 def tokenize_raw(text):
@@ -78,22 +87,23 @@ def remove_html_junk(tokens):
     return [t for t in tokens if t not in HTML_JUNK]
 
 
-def get_wordnet_pos(pos_tag):
-    if pos_tag.startswith("J"):
-        return wordnet.ADJ
-    elif pos_tag.startswith("V"):
-        return wordnet.VERB
-    elif pos_tag.startswith("N"):
-        return wordnet.NOUN
-    elif pos_tag.startswith("R"):
-        return wordnet.ADV
-    else:
-        return wordnet.NOUN
+def get_wordnet_pos(tag):
+    return {
+        "J": wordnet.ADJ,
+        "V": wordnet.VERB,
+        "N": wordnet.NOUN,
+        "R": wordnet.ADV,
+    }.get(tag[:1])
 
 
 def lemmatize(tokens):
-    tagged = nltk.pos_tag(tokens)
-    return [lemmatizer.lemmatize(tok, get_wordnet_pos(tag)) for tok, tag in tagged]
+    result = []
+    for word, tag in nltk.pos_tag(tokens):
+        pos = get_wordnet_pos(tag)
+        result.append(
+            lemmatizer.lemmatize(word, pos) if pos else word
+        )
+    return result
 
 
 def get_stop_words(protect_negation=True):

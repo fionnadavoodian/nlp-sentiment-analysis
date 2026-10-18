@@ -28,6 +28,8 @@ The pipeline is intentionally being developed incrementally so that each modelin
 
 ## Dataset
 
+The downloaded CSV already contains lowercase comments with no punctuation or HTML tags/entities. Some HTML/URL remnants remain as plain words. Capitalization and punctuation removal therefore cannot be evaluated on this dataset; their absence was not introduced by this project's preprocessing.
+
 The dataset contains **5,937 short social-media comments** labeled with one of three emotions:
 
 | Emotion | Approx. Count |
